@@ -2,130 +2,146 @@
 
 > Your AI money companion. Capture, understand and *feel* where your money goes.
 
-TrakIt is a premium expense-tracking app built in Flutter. It does **not** rely
-on bank sync alone — instead, it uses a hybrid capture pipeline that's fast,
-private and emotionally engaging.
+TrakIt is a premium Flutter expense-tracker built around a **hybrid capture
+pipeline** — screenshots, OCR, the Claude API, real camera, Gmail sync and
+quick-add text — wrapped in an Apple-grade glassmorphism UI.
 
-## Why it feels different
+## Real, not stubbed
 
-- **Screenshot scanner first.** Drop a PhonePe / GPay / Swiggy / Amazon
-  screenshot — the OCR + AI parser extracts amount, merchant, category and
-  payment mode in seconds.
-- **Quick add that reads English.** Type `₹350 Zomato` and you're done — no
-  forms, no dropdowns.
-- **Gmail sync, optional.** Connect Gmail to auto-import transaction emails.
-- **Camera receipts.** Snap a bill, get a clean expense.
-- **AI insights, narrated.** "You're spending 42% more on food this week" —
-  "Subscriptions total ₹2,400/month" — "Your late-night ordering increased."
+| Surface | Implementation |
+|---|---|
+| Screenshot capture | `image_picker` from gallery → `google_mlkit_text_recognition` on-device OCR → Claude Haiku 4.5 parser |
+| Quick add | Live AI parse as you type, debounced by sequence number |
+| Receipt camera | `camera` plugin with live `CameraPreview` behind a custom glass viewfinder; system-camera fallback via `image_picker` |
+| Gmail sync | Progress-stream UI + transaction harvest (OAuth wiring left as a TODO — see `lib/data/services/gmail_sync_service.dart`) |
+| AI parsing | **Claude Haiku 4.5** via raw HTTP (no Dart SDK). Prompt-cached system block, structured outputs via `output_config.format`. Falls back to a hardened rule-based parser when no API key is set. |
+| Insights | Local rule engine over real transaction history (week-over-week deltas, late-night ordering, subscription totals, weekend share) |
+| Persistence | `shared_preferences` behind a `StorageService` swappable for Isar/Hive |
+| App icon | Generated programmatically from `tool/gen_icon.dart`, fanned out by `flutter_launcher_icons` |
 
-The visual language draws from Apple Health, CRED and Notion: glassmorphism,
-aurora gradients, vivid category pills, premium type. Spreadsheet vibes are
-banned.
-
-## Getting started
+## Quick start
 
 ```bash
 cd trakit
+./scripts/setup.sh
 
-# add platform folders (the scaffold ships lib/ only)
-flutter create . --platforms=ios,android,web --org com.trakit --project-name trakit
+# with the Claude API (recommended):
+flutter run --dart-define=ANTHROPIC_API_KEY=sk-ant-...
 
-flutter pub get
+# without — the rule-based parser handles capture
 flutter run
 ```
 
-The app boots into a splash → onboarding (first run only) → home flow. Demo
-transactions seed automatically so the UI is alive on first launch.
+`scripts/setup.sh` is idempotent and does five things:
+
+1. `flutter create .` to scaffold `android/`, `ios/`, `web/`
+2. Patches `AndroidManifest.xml` and `Info.plist` with the camera + photo
+   permissions the plugins need
+3. `flutter pub get`
+4. Generates `assets/icons/app_icon.png` from the Dart source in `tool/`
+5. Runs `flutter_launcher_icons` to materialise platform-specific variants
 
 ## Architecture
 
 ```
 lib/
-  main.dart                 entrypoint, sets up ProviderScope + storage
+  main.dart                 entrypoint, ProviderScope + StorageService init
   app.dart                  MaterialApp.router, theme wiring
 
   core/
     theme/                  AppColors, AppGradients, AppTextStyles, AppTheme
-    router/                 GoRouter config (shell tabs + capture stack)
+    router/                 go_router shell + capture stack
     utils/                  Money / Dates formatters
     extensions/             BuildContext sugar
 
   data/
     models/                 ExpenseTxn, ExpenseCategory, Insight
-    services/               OcrService, AiParserService, GmailSyncService,
-                            InsightEngine, StorageService
+    services/
+      claude_service.dart   raw HTTP to /v1/messages, Haiku 4.5, prompt-cached
+      ai_parser_service.dart  Claude-first w/ rule fallback
+      ocr_service.dart      Google ML Kit, falls back to canned blobs off-mobile
+      gmail_sync_service.dart  progress stream + harvest stub
+      insight_engine.dart   narrative generation from raw transactions
+      storage_service.dart  SharedPreferences-backed CRUD
     repositories/           TransactionRepository
-    providers/              Riverpod providers + derived selectors
+    providers/              Riverpod + derived selectors
     mock/                   DummyData generator (weekend / late-night biased)
 
-  features/
-    splash/                 animated logo intro
-    onboarding/             3-page swipe, glass cards, gradient CTA
-    home/                   hero card, category strip, AI insight, recents
-    timeline/               filterable, grouped social-feed of expenses
-    insights/               donut + narrative cards
-    add_expense/            capture-method picker + quick add
-    scanner/                screenshot, receipt camera, gmail sync flows
-    detail/                 transaction detail
-    settings/               theme, capture, data, about
+  features/                 splash · onboarding · home · timeline · insights
+                            · add_expense · scanner (screenshot/receipt/gmail)
+                            · detail · settings
+  widgets/                  glass card, gradient button, aurora bg, charts, …
 
-  widgets/
-    cards/glass_card.dart           blurred frosted surface
-    buttons/gradient_button.dart    scale-on-press CTA
-    animations/animated_counter.dart tabular-figure currency tween
-    common/category_pill.dart       gradient pill w/ emoji & amount
-    common/transaction_tile.dart    feed row with source chip
-    common/aurora_background.dart   animated orb gradient backdrop
-    charts/spend_sparkline.dart     7-day fl_chart line
-    charts/category_donut.dart      animated PieChart center label
+tool/
+  gen_icon.dart             draws app_icon.png + adaptive foreground
+
+test/
+  ai_parser_service_test.dart    rule-parser correctness (amount picking, etc.)
+  claude_service_test.dart       HTTP shape: headers, model, cache_control, schema
+  insight_engine_test.dart       insight generation invariants
+  dummy_data_test.dart           determinism + sort order
+  formatters_test.dart           ₹ formatting + relative dates
+  storage_service_test.dart      JSON round-trip + malformed-blob recovery
 ```
 
-State management is **Riverpod 2** (`StateNotifier` + derived `Provider`s).
-Persistence uses `shared_preferences` — swap `StorageService` for Isar/Hive
-when you outgrow it; the API is shaped for a one-line replacement.
+## Why Claude Haiku 4.5?
 
-## Capture pipeline
+For an OCR-blob → structured-JSON task, Haiku 4.5 is the right tool:
 
-The services are **placeholders that match production shape**:
+- **Cheapest current Claude** — $1.00 / $5.00 per 1M tokens (input / output).
+  A typical receipt parse is ~1.5K tokens in + 80 tokens out, well under
+  $0.002 per call.
+- **Structured outputs supported** — we constrain Claude with a JSON schema
+  (`output_config.format.json_schema`) that enforces the response shape.
+- **Prompt caching** — the system prompt is intentionally large (3-4K
+  tokens of taxonomy, examples, formatting rules) so it crosses Haiku's
+  4096-token cacheable-prefix threshold. After the first call, cache reads
+  cost ~10% of fresh input.
+- **Adaptive thinking is unnecessary** — extraction doesn't need reasoning;
+  the schema does the heavy lifting.
 
-- `OcrService.recognizeFromImagePath` — wire `google_mlkit_text_recognition`
-  on device. The stub returns realistic sample blobs so the UI flows end to
-  end without native config.
-- `AiParserService.parseQuickAdd` / `parseOcrText` — rule-based extraction
-  for amount/merchant/category/payment. Drop in a small LLM (Gemma 2B int4
-  on-device or a Claude endpoint) without changing call sites.
-- `GmailSyncService.scan` — emits a fake progress stream. Wire
-  `googleapis` + `google_sign_in` with `gmail.readonly`.
-- `InsightEngine.generate` — produces 5-7 narrative insights deterministically
-  from real data (week-over-week deltas, late-night ordering, subscription
-  totals, weekend share, streaks).
+To upgrade to richer narrative insights, swap `_model` in
+`claude_service.dart` to `claude-sonnet-4-6` (Sonnet caches at 2048 tokens
+and produces better long-form reasoning). The call shape is identical.
 
-## Monetisation-ready
+The API key is compile-time-injected via `--dart-define=ANTHROPIC_API_KEY=...`.
+When absent, `ClaudeService.isConfigured` returns `false` and every parse
+falls through to a deterministic rule engine that's stable but lossier.
 
-`pubspec.yaml` is shaped for AdMob (`google_mobile_ads`) and RevenueCat
-(`purchases_flutter`) — kept commented to keep the scaffold buildable with
-zero native config. Uncomment + run the platform setup steps when you're
-ready to ship.
+## Tests + CI
+
+```bash
+flutter test
+```
+
+Tests cover the pure-Dart logic — parser, insight engine, dummy data,
+formatters, storage round-trip, and the Claude HTTP request shape
+(injected `MockClient`, no network). CI runs analyse + test + APK build on
+every push to the working branch — see `.github/workflows/trakit-ci.yml`.
+
+## Monetisation hooks
+
+`pubspec.yaml` is shaped for `google_mobile_ads` and `purchases_flutter`
+(commented out to keep the scaffold buildable without native config).
+Uncomment + follow each plugin's platform setup when ready to ship.
 
 ## Design language
 
 - **Palette.** Plum night-sky (`#0B0613`) + violet brand (`#B084FF`) + peach
-  sunrise accent (`#FFB37C`). Light mode is a warm lilac.
-- **Type.** Plus Jakarta Sans, variable-axis tight tracking on large display
-  sizes, tabular figures for currency.
-- **Motion.** Every screen transitions in with stagger; the FAB pulses; the
-  aurora background drifts on a 14s loop; touches haptic-tap.
-- **Glass.** `GlassCard` is the workhorse surface — backdrop blur 16px,
-  6% white tint, 1px inner stroke. Light mode trades blur for a tinted
-  card with soft shadow.
+  sunrise accent (`#FFB37C`).
+- **Type.** Plus Jakarta Sans with tabular figures on currency.
+- **Motion.** Aurora background drifts on a 14s loop; FAB pulses; every
+  screen staggers in; haptics on capture.
+- **Glass.** `GlassCard` is the workhorse — 16px backdrop blur, 6% white
+  tint, 1px inner stroke. Light mode trades blur for a tinted card.
 
-## Roadmap hooks
+## Roadmap
 
-- Firebase auth + cloud sync (commented in `pubspec.yaml`).
-- Real ML Kit + Tesseract OCR.
-- Budget envelope feature (storage key reserved: `monthlyBudget`).
-- Bank statement PDF ingestion.
-- Family / shared expenses.
+- Real Gmail OAuth + email regex pipeline (`googleapis` + `google_sign_in`)
+- Firebase auth + cloud sync
+- Budget envelopes (storage key `monthlyBudget` reserved)
+- Bank statement PDF ingestion
+- Family / shared expenses
 
 ---
 

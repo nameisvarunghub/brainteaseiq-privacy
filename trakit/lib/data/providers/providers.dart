@@ -4,6 +4,7 @@ import '../models/insight.dart';
 import '../models/transaction.dart';
 import '../repositories/transaction_repository.dart';
 import '../services/ai_parser_service.dart';
+import '../services/claude_service.dart';
 import '../services/gmail_sync_service.dart';
 import '../services/insight_engine.dart';
 import '../services/ocr_service.dart';
@@ -17,8 +18,21 @@ final transactionRepositoryProvider = Provider<TransactionRepository>(
   (ref) => TransactionRepository(ref.watch(storageProvider)),
 );
 
-final ocrServiceProvider = Provider<OcrService>((_) => OcrService());
-final aiParserProvider = Provider<AiParserService>((_) => AiParserService());
+final claudeServiceProvider = Provider<ClaudeService>((ref) {
+  final svc = ClaudeService();
+  ref.onDispose(svc.dispose);
+  return svc;
+});
+
+final ocrServiceProvider = Provider<OcrService>((ref) {
+  final svc = OcrService();
+  ref.onDispose(() => svc.dispose());
+  return svc;
+});
+
+final aiParserProvider = Provider<AiParserService>(
+  (ref) => AiParserService(claude: ref.watch(claudeServiceProvider)),
+);
 final gmailSyncProvider = Provider<GmailSyncService>((_) => GmailSyncService());
 final insightEngineProvider = Provider<InsightEngine>((_) => InsightEngine());
 

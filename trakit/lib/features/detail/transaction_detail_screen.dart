@@ -270,6 +270,3 @@ class _Row extends StatelessWidget {
   }
 }
 
-extension _FirstOrNullX<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}

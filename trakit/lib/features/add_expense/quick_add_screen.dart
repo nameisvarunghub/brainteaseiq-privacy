@@ -27,6 +27,8 @@ class _QuickAddScreenState extends ConsumerState<QuickAddScreen> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
   ParsedDraft? _draft;
+  bool _parsing = false;
+  int _parseSeq = 0;
 
   @override
   void initState() {
@@ -41,13 +43,22 @@ class _QuickAddScreenState extends ConsumerState<QuickAddScreen> {
     super.dispose();
   }
 
-  void _onChanged(String v) {
+  Future<void> _onChanged(String v) async {
     if (v.trim().isEmpty) {
-      setState(() => _draft = null);
+      setState(() {
+        _draft = null;
+        _parsing = false;
+      });
       return;
     }
-    final parsed = ref.read(aiParserProvider).parseQuickAdd(v);
-    setState(() => _draft = parsed);
+    final seq = ++_parseSeq;
+    setState(() => _parsing = true);
+    final parsed = await ref.read(aiParserProvider).parseQuickAdd(v);
+    if (!mounted || seq != _parseSeq) return;
+    setState(() {
+      _draft = parsed;
+      _parsing = false;
+    });
   }
 
   Future<void> _save() async {
@@ -113,6 +124,26 @@ class _QuickAddScreenState extends ConsumerState<QuickAddScreen> {
                 ),
               ),
               const SizedBox(height: 14),
+              if (_parsing && _draft == null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child:
+                              CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 12),
+                        Text('AI is reading your line…',
+                            style: context.text.bodyMedium),
+                      ],
+                    ),
+                  ),
+                ),
               if (_draft != null && _draft!.amount > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),

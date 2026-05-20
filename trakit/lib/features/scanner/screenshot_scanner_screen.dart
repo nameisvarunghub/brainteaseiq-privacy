@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/extensions/context_ext.dart';
@@ -33,14 +34,37 @@ class _ScreenshotScannerScreenState
   ParsedDraft? _draft;
   String? _rawText;
 
-  Future<void> _simulateUpload() async {
+  Future<void> _pickAndScan() async {
     HapticFeedback.lightImpact();
+    final picker = ImagePicker();
+    String path = 'demo://sample';
+    try {
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+      );
+      if (picked != null) {
+        path = picked.path;
+      } else {
+        // User cancelled; stay on idle. OCR falls back to a sample blob
+        // if path is 'demo://sample', so we can also skip silently.
+        return;
+      }
+    } catch (_) {
+      // Picker unavailable (e.g. desktop) — fall through to demo sample.
+    }
+    await _runOcrPipeline(path);
+  }
+
+  Future<void> _runOcrPipeline(String path) async {
     setState(() => _stage = _Stage.scanning);
     final ocr = ref.read(ocrServiceProvider);
     final ai = ref.read(aiParserProvider);
     try {
-      final raw = await ocr.recognizeFromImagePath('demo://sample');
-      final draft = ai.parseOcrText(raw, source: CaptureSource.screenshot);
+      final raw = await ocr.recognizeFromImagePath(path);
+      final draft =
+          await ai.parseOcrText(raw, source: CaptureSource.screenshot);
+      if (!mounted) return;
       setState(() {
         _rawText = raw;
         _draft = draft;
@@ -48,6 +72,7 @@ class _ScreenshotScannerScreenState
       });
       HapticFeedback.mediumImpact();
     } catch (_) {
+      if (!mounted) return;
       setState(() => _stage = _Stage.error);
     }
   }
@@ -102,7 +127,7 @@ class _ScreenshotScannerScreenState
   Widget _body() {
     switch (_stage) {
       case _Stage.idle:
-        return _IdleView(onPick: _simulateUpload);
+        return _IdleView(onPick: _pickAndScan);
       case _Stage.scanning:
         return const _ScanningView();
       case _Stage.parsed:

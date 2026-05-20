@@ -1,7 +1,11 @@
+import 'dart:io';
+
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/extensions/context_ext.dart';
@@ -13,6 +17,12 @@ import '../../widgets/buttons/gradient_button.dart';
 import '../../widgets/cards/glass_card.dart';
 import '../../widgets/common/aurora_background.dart';
 
+/// Live camera preview with a custom glass viewfinder.
+///
+/// We initialise a [CameraController] in `initState`. If that fails — no
+/// permission, no camera, desktop/web — we silently fall back to the
+/// system camera via `image_picker(source: ImageSource.camera)`. Both
+/// paths feed the same OCR + AI pipeline.
 class ReceiptScannerScreen extends ConsumerStatefulWidget {
   const ReceiptScannerScreen({super.key});
   @override
@@ -20,29 +30,102 @@ class ReceiptScannerScreen extends ConsumerStatefulWidget {
       _ReceiptScannerScreenState();
 }
 
-class _ReceiptScannerScreenState
-    extends ConsumerState<ReceiptScannerScreen> with TickerProviderStateMixin {
+class _ReceiptScannerScreenState extends ConsumerState<ReceiptScannerScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _scan = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 2),
   )..repeat(reverse: true);
 
-  bool _captured = false;
+  CameraController? _controller;
+  bool _initializing = true;
+  bool _hasCamera = false;
+  bool _capturing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initCamera();
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) throw CameraException('no_cameras', 'No cameras');
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final c = CameraController(
+        back,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await c.initialize();
+      if (!mounted) {
+        await c.dispose();
+        return;
+      }
+      setState(() {
+        _controller = c;
+        _hasCamera = true;
+        _initializing = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _hasCamera = false;
+        _initializing = false;
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    if (state == AppLifecycleState.inactive) {
+      c.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initCamera();
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scan.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   Future<void> _capture() async {
+    if (_capturing) return;
     HapticFeedback.mediumImpact();
-    setState(() => _captured = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+    setState(() => _capturing = true);
+
+    String? path;
+    try {
+      if (_hasCamera && _controller != null) {
+        final file = await _controller!.takePicture();
+        path = file.path;
+      } else {
+        // Fallback path: kick to the OS camera.
+        final picked =
+            await ImagePicker().pickImage(source: ImageSource.camera);
+        path = picked?.path;
+      }
+    } catch (_) {
+      path = null;
+    }
+
     final ocr = ref.read(ocrServiceProvider);
     final ai = ref.read(aiParserProvider);
-    final raw = await ocr.recognizeFromImagePath('demo://receipt');
-    final draft = ai.parseOcrText(raw, source: CaptureSource.receipt);
+    final raw = await ocr.recognizeFromImagePath(path ?? 'demo://receipt');
+    final draft = await ai.parseOcrText(raw, source: CaptureSource.receipt);
+
     await ref.read(transactionsProvider.notifier).add(
           ExpenseTxn(
             id: const Uuid().v4(),
@@ -55,7 +138,16 @@ class _ReceiptScannerScreenState
             rawSourceText: raw,
           ),
         );
+
+    if (path != null && path != 'demo://receipt') {
+      // Best-effort cleanup of the temp image — failures are fine.
+      try {
+        await File(path).delete();
+      } catch (_) {}
+    }
+
     if (!mounted) return;
+    setState(() => _capturing = false);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -76,63 +168,10 @@ class _ReceiptScannerScreenState
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            // fake camera frame backdrop
-            Positioned.fill(
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFF1A0E29), Color(0xFF000000)],
-                  ),
-                ),
-              ),
-            ),
-            // viewfinder
-            Center(
-              child: AnimatedBuilder(
-                animation: _scan,
-                builder: (_, __) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        width: 260,
-                        height: 360,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.18),
-                            width: 1.4,
-                          ),
-                        ),
-                      ),
-                      // corner brackets
-                      ..._corners(),
-                      // scan line
-                      Positioned(
-                        top: 80 + _scan.value * 200,
-                        child: Container(
-                          width: 220,
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                blurRadius: 14,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
+            _backdrop(),
+            _viewfinder(),
             Positioned(
               top: 8,
               left: 8,
@@ -145,7 +184,11 @@ class _ReceiptScannerScreenState
               top: 22,
               right: 24,
               child: Text(
-                'Align receipt within frame',
+                _hasCamera
+                    ? 'Align receipt within frame'
+                    : (_initializing
+                        ? 'Starting camera…'
+                        : 'Tap to use system camera'),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.85),
                   fontWeight: FontWeight.w600,
@@ -156,34 +199,121 @@ class _ReceiptScannerScreenState
               bottom: 32,
               left: 0,
               right: 0,
-              child: Center(
-                child: GestureDetector(
-                  onTap: _captured ? null : _capture,
-                  child: Container(
-                    width: 78,
-                    height: 78,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        width: 4,
+              child: Center(child: _shutter()),
+            ),
+            if (_capturing)
+              Container(
+                color: Colors.black.withValues(alpha: 0.55),
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.white),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Reading receipt…',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontWeight: FontWeight.w600,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          blurRadius: 30,
-                        ),
-                      ],
                     ),
-                    child: const Icon(Icons.camera_alt_rounded,
-                        color: Colors.black, size: 32),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _backdrop() {
+    final c = _controller;
+    if (_hasCamera && c != null && c.value.isInitialized) {
+      return Center(
+        child: AspectRatio(
+          aspectRatio: c.value.aspectRatio,
+          child: CameraPreview(c),
+        ),
+      );
+    }
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1A0E29), Color(0xFF000000)],
+        ),
+      ),
+    );
+  }
+
+  Widget _viewfinder() {
+    return Center(
+      child: AnimatedBuilder(
+        animation: _scan,
+        builder: (_, __) {
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 260,
+                height: 360,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    width: 1.4,
                   ),
                 ),
               ),
+              ..._corners(),
+              if (_hasCamera)
+                Positioned(
+                  top: 80 + _scan.value * 200,
+                  child: Container(
+                    width: 220,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          blurRadius: 14,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _shutter() {
+    return GestureDetector(
+      onTap: _capturing ? null : _capture,
+      child: Container(
+        width: 78,
+        height: 78,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.6),
+            width: 4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.white.withValues(alpha: 0.6),
+              blurRadius: 30,
             ),
           ],
         ),
+        child: const Icon(Icons.camera_alt_rounded,
+            color: Colors.black, size: 32),
       ),
     );
   }
@@ -203,7 +333,8 @@ class _ReceiptScannerScreenState
         left: alignment == Alignment.topLeft || alignment == Alignment.bottomLeft
             ? horizontal
             : null,
-        right: alignment == Alignment.topRight || alignment == Alignment.bottomRight
+        right: alignment == Alignment.topRight ||
+                alignment == Alignment.bottomRight
             ? horizontal
             : null,
         child: CustomPaint(
@@ -225,12 +356,14 @@ class _ReceiptScannerScreenState
 class _CornerPainter extends CustomPainter {
   final Alignment alignment;
   _CornerPainter({required this.alignment});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = Colors.white
       ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
     const r = 8.0;
     final s = size.width;
     final path = Path();
@@ -255,11 +388,12 @@ class _CornerPainter extends CustomPainter {
       path.quadraticBezierTo(s, s, s, s - r);
       path.lineTo(s, 0);
     }
-    canvas.drawPath(path, paint..style = PaintingStyle.stroke);
+    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant _CornerPainter old) => old.alignment != alignment;
+  bool shouldRepaint(covariant _CornerPainter old) =>
+      old.alignment != alignment;
 }
 
 class _CapturedSheet extends StatelessWidget {
@@ -289,7 +423,7 @@ class _CapturedSheet extends StatelessWidget {
             Container(
               width: 56,
               height: 56,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: AppGradients.brand,
                 shape: BoxShape.circle,
               ),

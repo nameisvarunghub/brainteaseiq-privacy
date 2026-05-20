@@ -14,7 +14,6 @@ dependencies:
 
   # State management
   flutter_riverpod: ^2.5.1
-  riverpod_annotation: ^2.3.5
 
   # Navigation
   go_router: ^14.2.0
@@ -37,11 +36,15 @@ dependencies:
   uuid: ^4.4.0
   collection: ^1.18.0
   equatable: ^2.0.5
+  http: ^1.2.2
 
-  # Capture (placeholders for OCR / camera / gmail)
+  # Capture — real implementations (require iOS/Android platform configuration)
   image_picker: ^1.1.2
+  google_mlkit_text_recognition: ^0.13.1
+  camera: ^0.11.0+2
+  permission_handler: ^11.3.1
 
-  # Monetisation-ready (kept commented to avoid native config in this scaffold)
+  # Monetisation-ready (kept commented to avoid native config in the bare scaffold)
   # google_mobile_ads: ^5.1.0
   # purchases_flutter: ^6.29.4
 
@@ -54,6 +57,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  image: ^4.2.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -61,3 +66,12 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/lottie/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icons/app_icon.png"
+  adaptive_icon_background: "#0B0613"
+  adaptive_icon_foreground: "assets/icons/app_icon_foreground.png"
+  min_sdk_android: 21
