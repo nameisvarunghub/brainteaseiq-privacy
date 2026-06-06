@@ -1,47 +1,122 @@
-🧠
-Privacy Policy
-BrainTease IQ  ·  Effective Date: April 24, 2025
-BrainTease IQ is a free trivia quiz app. We are committed to protecting your privacy. This policy explains what data we collect, why, and how it is used.
-1. Information We Collect
-We collect only the minimum information needed to operate the app:
-	•	Account information — your name and email address when you create an account.
-	•	Game data — your score history, streak, XP, level, and achievements. This data is stored locally on your device.
-	•	Device identifiers — collected by our advertising partner (Google AdMob) to serve ads. See Section 4.
-We do not collect your location, contacts, photos, or any sensitive personal data.
-2. How We Use Your Information
-	•	To create and manage your in-app account.
-	•	To track your quiz progress, streak, and achievements locally on your device.
-	•	To serve relevant advertisements through Google AdMob.
-	•	To improve the app experience based on usage patterns.
-3. Data Storage
-Your account credentials and game progress are stored locally on your device using encrypted local storage. We do not operate a server that stores your personal data. Deleting the app removes all locally stored data.
-4. Advertising (Google AdMob)
-BrainTease IQ uses Google AdMob to display advertisements. AdMob may collect and use data including device identifiers (such as Advertising ID on Android, or IDFA on iOS) to serve personalized or non-personalized ads.
-	•	On iOS, we request your permission via the App Tracking Transparency (ATT) prompt before any tracking occurs.
-	•	If you decline tracking, only non-personalized ads will be shown.
-	•	You can reset or limit ad tracking at any time in your device settings.
-Google's privacy policy: policies.google.com/privacy
-5. Account Deletion
-You can delete your account at any time from within the app:
-Profile → Delete Account
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - BrainTease IQ</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0d0825;
+      color: #cbd5e1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.7;
+    }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { color: #a78bfa; margin-bottom: 4px; }
+    h2 { color: #c4b5fd; margin-top: 32px; }
+    a { color: #a78bfa; }
+    .meta { color: #94a3b8; }
+    .notice {
+      padding: 14px 16px;
+      border-left: 3px solid #7c3aed;
+      background: rgba(124, 58, 237, 0.15);
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="meta">BrainTease IQ | Effective date: June 6, 2026</p>
 
-Deleting your account permanently removes your name, email, and all associated game data from your device immediately. This action cannot be undone.
-6. Children's Privacy
-BrainTease IQ is intended for users aged 13 and older. We do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided us with personal information, please contact us and we will take steps to delete it.
-7. Third-Party Services
-The app uses the following third-party services:
-	•	Google AdMob — advertising
-	•	Open Trivia Database (opentdb.com) — supplementary trivia questions (no personal data shared)
-8. Your Rights
-You have the right to:
-	•	Access the personal data we hold about you.
-	•	Delete your account and all associated data at any time (see Section 5).
-	•	Opt out of personalized advertising via your device settings.
-9. Changes to This Policy
-We may update this Privacy Policy from time to time. We will notify you of significant changes by updating the effective date at the top of this page. Continued use of the app after changes constitutes acceptance of the revised policy.
-10. Contact Us
-If you have any questions about this Privacy Policy, please contact us:
+  <p class="notice">
+    BrainTease IQ is a free trivia app. This policy explains what information is
+    processed, why it is needed, and the choices available to you.
+  </p>
 
-Email: queries@dbatocloudguide.com
-App: BrainTease IQ
-Last updated: April 24, 2025
+  <h2>1. Information We Process</h2>
+  <ul>
+    <li><strong>Account information:</strong> name, email address, unique account identifier, email-verification status, and authentication records.</li>
+    <li><strong>Game data:</strong> score history, streak, XP, level, and achievements stored locally on your device.</li>
+    <li><strong>Advertising data:</strong> device information, IP address, diagnostics, ad interactions, and device identifiers where permitted.</li>
+  </ul>
+  <p>We do not request access to your contacts, photos, or precise location.</p>
+
+  <h2>2. How We Use Information</h2>
+  <ul>
+    <li>To create, authenticate, verify, and manage your account.</li>
+    <li>To maintain game progress and achievements on your device.</li>
+    <li>To display and measure non-personalized advertising.</li>
+    <li>To maintain app security and diagnose technical problems.</li>
+  </ul>
+
+  <h2>3. Data Storage</h2>
+  <p>
+    Account authentication is provided by <strong>Google Firebase Authentication</strong>.
+    Firebase stores your email address, display name, unique account identifier,
+    email-verification status, and authentication records on Google's systems.
+    Passwords are handled by Firebase and are not visible to us.
+  </p>
+  <p>
+    Game progress is stored locally on your device. Deleting the app removes local
+    game data, but does not by itself delete your Firebase account.
+  </p>
+
+  <h2>4. Advertising and Consent</h2>
+  <p>
+    BrainTease IQ uses Google AdMob to display non-personalized advertisements.
+    Where required, Google's User Messaging Platform asks for your privacy choices
+    before the app requests ads.
+  </p>
+  <ul>
+    <li>On iOS, App Tracking Transparency controls whether the IDFA may be used.</li>
+    <li>Ad requests are configured as non-personalized, regardless of your ATT choice.</li>
+    <li>You can limit tracking through your device privacy settings.</li>
+  </ul>
+  <p><a href="https://policies.google.com/privacy">Google Privacy Policy</a></p>
+
+  <h2>5. Account Deletion</h2>
+  <p class="notice">
+    Open <strong>Profile &gt; Delete Account</strong> inside the app. Deleting your
+    account removes your Firebase Authentication account, including its email,
+    display name, and account identifier. Local game data is also removed from your
+    device. This action cannot be undone.
+  </p>
+
+  <h2>6. Children's Privacy</h2>
+  <p>
+    BrainTease IQ is intended for users aged 13 and older. We do not knowingly
+    collect personal information from children under 13. Contact us if you believe
+    a child has provided personal information so that we can delete it.
+  </p>
+
+  <h2>7. Third-Party Services</h2>
+  <ul>
+    <li><strong>Google Firebase Authentication:</strong> account creation, sign-in, email verification, and account deletion.</li>
+    <li><strong>Google AdMob:</strong> advertising and ad measurement.</li>
+    <li><strong>Open Trivia Database:</strong> supplementary trivia questions; no account information is shared.</li>
+  </ul>
+
+  <h2>8. Your Choices and Rights</h2>
+  <ul>
+    <li>Delete your account and associated authentication data from inside the app.</li>
+    <li>Control tracking permission and device advertising settings.</li>
+    <li>Contact us to ask about your personal information or request assistance.</li>
+  </ul>
+
+  <h2>9. Policy Changes</h2>
+  <p>
+    We may update this policy when the app or its services change. The effective
+    date at the top of this page identifies the latest version.
+  </p>
+
+  <h2>10. Contact</h2>
+  <p>
+    Email: <a href="mailto:support@dailyproductiveapps.com">support@dailyproductiveapps.com</a><br>
+    App: BrainTease IQ
+  </p>
+</main>
+</body>
+</html>
